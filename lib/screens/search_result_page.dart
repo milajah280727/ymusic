@@ -3,6 +3,7 @@ import 'package:lazy_load_scrollview/lazy_load_scrollview.dart';
 import 'package:provider/provider.dart';
 import '../services/ytdl_service.dart';
 import '../providers/player_provider.dart';
+import '../services/download_service.dart'; // IMPORT BARU
 
 class SearchResultPage extends StatefulWidget {
   final String query;
@@ -50,6 +51,28 @@ class _SearchResultPageState extends State<SearchResultPage> {
     });
   }
 
+  // FUNGSI BARU UNTUK UNDUHAN
+  Future<void> _download(String videoId, String title, bool isAudio) async {
+    final safeTitle = title.replaceAll(RegExp(r'[^\w\s-]'), '').replaceAll(' ', '_');
+    final fileName = '${safeTitle}.${isAudio ? 'mp3' : 'mp4'}';
+    
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Mempersiapkan unduhan...')));
+
+    try {
+      final url = isAudio
+          ? await YTDLService.getAudioStream(videoId)
+          : await YTDLService.getVideoStream(videoId);
+      
+      DownloadService.downloadFile(
+        url: url,
+        fileName: fileName,
+        context: context,
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gagal mempersiapkan unduhan: $e')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -60,10 +83,8 @@ class _SearchResultPageState extends State<SearchResultPage> {
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () => Navigator.pop(context),
         ),
-        // --- PERUBAHAN: Buat judul dapat diklik ---
         title: GestureDetector(
           onTap: () {
-            // Kembali ke halaman pencarian dan bawa query saat ini
             Navigator.pushReplacementNamed(
               context,
               '/search',
@@ -74,7 +95,6 @@ class _SearchResultPageState extends State<SearchResultPage> {
             widget.query,
             style: const TextStyle(
               fontSize: 16,
-              // Tambahkan garis bawah untuk menunjukkan bahwa ini adalah link
               decoration: TextDecoration.underline,
               decorationColor: Colors.white70,
             ),
@@ -84,7 +104,6 @@ class _SearchResultPageState extends State<SearchResultPage> {
           IconButton(icon: const Icon(Icons.search), onPressed: () => Navigator.pop(context)),
         ],
       ),
-      // --- KEMBALIKAN KE STRUKTUR AWAL ---
       body: LazyLoadScrollView(
         isLoading: isLoadingMore,
         onEndOfPage: () => _search(widget.query, loadMore: true),
@@ -101,7 +120,7 @@ class _SearchResultPageState extends State<SearchResultPage> {
             final v = results[i];
             return InkWell(
               onTap: () {
-                Provider.of<PlayerProvider>(context, listen: false).playVideo(
+                Provider.of<PlayerProvider>(context, listen: false).playMusic(
                   videoId: v['id'],
                   title: v['title'],
                   channel: v['channel'],
@@ -149,7 +168,40 @@ class _SearchResultPageState extends State<SearchResultPage> {
                         ],
                       ),
                     ),
-                    const Icon(Icons.more_vert, color: Colors.grey),
+                    // --- PERUBAHAN DIMULAI DI SINI ---
+                    PopupMenuButton<String>(
+                      icon: const Icon(Icons.more_vert, color: Colors.grey),
+                      onSelected: (String value) {
+                        if (value == 'download_audio') {
+                          _download(v['id'], v['title'], true);
+                        } else if (value == 'download_video') {
+                          _download(v['id'], v['title'], false);
+                        }
+                      },
+                      itemBuilder: (BuildContext context) => [
+                        const PopupMenuItem<String>(
+                          value: 'download_audio',
+                          child: Row(
+                            children: [
+                              Icon(Icons.music_note, color: Colors.pink),
+                              SizedBox(width: 8),
+                              Text('Unduh Musik'),
+                            ],
+                          ),
+                        ),
+                        const PopupMenuItem<String>(
+                          value: 'download_video',
+                          child: Row(
+                            children: [
+                              Icon(Icons.videocam, color: Colors.pink),
+                              SizedBox(width: 8),
+                              Text('Unduh Video'),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    // --- PERUBAHAN SELESAI DI SINI ---
                   ],
                 ),
               ),

@@ -1,10 +1,10 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:lazy_load_scrollview/lazy_load_scrollview.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:provider/provider.dart';
 import '../services/ytdl_service.dart';
 import '../providers/player_provider.dart';
+import '../services/download_service.dart'; // IMPORT BARU
 
 class YMusicPage extends StatefulWidget {
   const YMusicPage({super.key});
@@ -16,7 +16,7 @@ class YMusicPage extends StatefulWidget {
 class _YMusicPageState extends State<YMusicPage> {
   // --- QUERY UNTUK CHIP KONTEN ---
   final Map<String, String> chipQueries = {
-    "Untukmu": "placeholder", // Chip khusus untuk rekomendasi
+    "Untukmu": "placeholder",
     "Musik": "music",
     "Lofi": "lofi girl",
     "Gaming": "gaming music",
@@ -28,9 +28,9 @@ class _YMusicPageState extends State<YMusicPage> {
   bool isLoading = false;
   bool isLoadingMore = false;
   int page = 1;
-  String currentChip = "Untukmu"; // Default ke chip rekomendasi
+  String currentChip = "Untukmu";
   List<String> searchHistory = [];
-  String? _recommendationQuery; // Untuk menyimpan query gabungan
+  String? _recommendationQuery;
 
   @override
   void initState() {
@@ -43,31 +43,25 @@ class _YMusicPageState extends State<YMusicPage> {
     final history = prefs.getStringList('search_history') ?? [];
     setState(() => searchHistory = history.reversed.toList());
     
-    // Buat query rekomendasi saat halaman dimuat
     _buildRecommendationQuery();
-    _fetchVideos(); // Panggil tanpa parameter karena kita akan gunakan _recommendationQuery
+    _fetchVideos();
   }
 
-  // --- FUNGSI UNTUK MEMBUAT QUERY GABUNGAN DARI RIWAYAT ---
   void _buildRecommendationQuery() {
     if (searchHistory.isEmpty) {
-      _recommendationQuery = "trending music in indonesia"; // Query default
+      _recommendationQuery = "trending music in indonesia";
     } else {
-      // Ambil 5 kata kunci terakhir dan gabungkan dengan 'OR'
       final lastFiveSearches = searchHistory.take(5);
       _recommendationQuery = lastFiveSearches.map((query) => '"$query"').join(' OR ');
     }
   }
 
-  // --- FUNGSI UTAMA UNTUK MENGAMBIL DATA VIDEO ---
   Future<void> _fetchVideos({bool loadMore = false}) async {
     String actualQuery;
 
     if (currentChip == "Untukmu") {
-      // Gunakan query rekomendasi yang sudah dibuat
       actualQuery = _recommendationQuery ?? "trending music";
     } else {
-      // Gunakan query dari chip lain
       actualQuery = chipQueries[currentChip]!;
     }
 
@@ -103,23 +97,43 @@ class _YMusicPageState extends State<YMusicPage> {
   }
 
   void _play(String id, String title, String channel) {
-    Provider.of<PlayerProvider>(context, listen: false).playVideo(
+    Provider.of<PlayerProvider>(context, listen: false).playMusic(
       videoId: id,
       title: title,
       channel: channel,
     );
   }
 
+  // FUNGSI BARU UNTUK UNDUHAN
+  Future<void> _download(String videoId, String title, bool isAudio) async {
+    final safeTitle = title.replaceAll(RegExp(r'[^\w\s-]'), '').replaceAll(' ', '_');
+    final fileName = '${safeTitle}.${isAudio ? 'mp3' : 'mp4'}';
+    
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Mempersiapkan unduhan...')));
+
+    try {
+      final url = isAudio
+          ? await YTDLService.getAudioStream(videoId)
+          : await YTDLService.getVideoStream(videoId);
+      
+      DownloadService.downloadFile(
+        url: url,
+        fileName: fileName,
+        context: context,
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gagal mempersiapkan unduhan: $e')));
+    }
+  }
+
+
   @override
   Widget build(BuildContext context) {
-    // --- TIDAK LAGI MENGGUNAKAN SCAFFOLD ---
-    // Langsung kembalikan widget konten utama
     return LazyLoadScrollView(
       isLoading: isLoadingMore,
       onEndOfPage: () => _fetchVideos(loadMore: true),
       child: CustomScrollView(
         slivers: [
-          // --- SLIVER UNTUK CHIP KONTEN ---
           SliverToBoxAdapter(
             child: SizedBox(
               height: 60,
@@ -155,7 +169,6 @@ class _YMusicPageState extends State<YMusicPage> {
             ),
           ),
           
-          // --- SLIVER UNTUK JUDUL HALAMAN ---
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -166,7 +179,6 @@ class _YMusicPageState extends State<YMusicPage> {
             ),
           ),
 
-          // --- SLIVER UNTUK INDIKATOR LOADING ATAU PESAN KOSONG ---
           if (isLoading)
             const SliverToBoxAdapter(
               child: SizedBox(height: 200, child: Center(child: CircularProgressIndicator(color: Colors.pink))),
@@ -189,65 +201,113 @@ class _YMusicPageState extends State<YMusicPage> {
               ),
             )
           else
-            // --- SLIVER UNTUK DAFTAR VIDEO ---
-            SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, i) {
-                  final v = videos[i];
-                  return InkWell(
-                    onTap: () => _play(v['id'], v['title'], v['channel']),
-                    splashColor: Colors.pink.withValues(alpha: 0.3),
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Row(
-                        children: [
-                          Hero(
-                            tag: v['id'],
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(10),
-                              child: Image.network(
-                                v['thumbnail'],
-                                width: 90,
-                                height: 60,
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => Container(
-                                  width: 90,
-                                  height: 60,
-                                  color: Colors.grey[800],
-                                  child: const Icon(Icons.music_video, color: Colors.white),
-                                ),
+            Consumer<PlayerProvider>(
+              builder: (context, playerProvider, child) {
+                return SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (context, i) {
+                      final v = videos[i];
+                      return InkWell(
+                        onTap: () {
+                          if (playerProvider.isAudioServiceReady) {
+                            _play(v['id'], v['title'], v['channel']);
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Pemutar musik sedang disiapkan...')),
+                            );
+                          }
+                        },
+                        child: Opacity(
+                          opacity: playerProvider.isAudioServiceReady ? 1.0 : 0.5,
+                          child: IgnorePointer(
+                            ignoring: !playerProvider.isAudioServiceReady,
+                            child: Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Row(
+                                children: [
+                                  Hero(
+                                    tag: v['id'],
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(10),
+                                      child: Image.network(
+                                        v['thumbnail'],
+                                        width: 90,
+                                        height: 60,
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (_, __, ___) => Container(
+                                          width: 90,
+                                          height: 60,
+                                          color: Colors.grey[800],
+                                          child: const Icon(Icons.music_video, color: Colors.white),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          v['title'],
+                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.white),
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        Text(
+                                          '${v['channel']} • ${v['duration']}',
+                                          style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  // --- PERUBAHAN DIMULAI DI SINI ---
+                                  PopupMenuButton<String>(
+                                    icon: const Icon(Icons.more_vert, color: Colors.grey),
+                                    onSelected: (String value) {
+                                      if (value == 'download_audio') {
+                                        _download(v['id'], v['title'], true);
+                                      } else if (value == 'download_video') {
+                                        _download(v['id'], v['title'], false);
+                                      }
+                                    },
+                                    itemBuilder: (BuildContext context) => [
+                                      const PopupMenuItem<String>(
+                                        value: 'download_audio',
+                                        child: Row(
+                                          children: [
+                                            Icon(Icons.music_note, color: Colors.pink),
+                                            SizedBox(width: 8),
+                                            Text('Unduh Musik'),
+                                          ],
+                                        ),
+                                      ),
+                                      const PopupMenuItem<String>(
+                                        value: 'download_video',
+                                        child: Row(
+                                          children: [
+                                            Icon(Icons.videocam, color: Colors.pink),
+                                            SizedBox(width: 8),
+                                            Text('Unduh Video'),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  // --- PERUBAHAN SELESAI DI SINI ---
+                                ],
                               ),
                             ),
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  v['title'],
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                Text(
-                                  '${v['channel']} • ${v['duration']}',
-                                  style: TextStyle(color: Colors.grey[400], fontSize: 12),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const Icon(Icons.more_vert, color: Colors.grey),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-                childCount: videos.length,
-              ),
+                        ),
+                      );
+                    },
+                    childCount: videos.length,
+                  ),
+                );
+              },
             ),
 
-          // --- SLIVER UNTUK INDIKATOR LOAD MORE ---
           if (isLoadingMore)
             const SliverToBoxAdapter(
               child: Padding(

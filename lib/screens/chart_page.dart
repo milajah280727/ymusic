@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../providers/player_provider.dart';
+import '../services/download_service.dart'; // IMPORT BARU
+import '../services/ytdl_service.dart';
 
 class ChartPage extends StatefulWidget {
   const ChartPage({super.key});
@@ -44,17 +46,40 @@ class _ChartPageState extends State<ChartPage> {
   }
 
   void _play(String id, String title, String channel) {
-    // Panggil Provider untuk memutar video secara global
-    Provider.of<PlayerProvider>(context, listen: false).playVideo(
+    Provider.of<PlayerProvider>(context, listen: false).playMusic(
       videoId: id,
       title: title,
       channel: channel,
     );
   }
 
+  // FUNGSI BARU UNTUK UNDUHAN
+  Future<void> _download(String videoId, String title, bool isAudio) async {
+    final safeTitle = title.replaceAll(RegExp(r'[^\w\s-]'), '').replaceAll(' ', '_');
+    final fileName = '$safeTitle.${isAudio ? 'mp3' : 'mp4'}';
+    
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Mempersiapkan unduhan...')));
+
+    try {
+      // Perlu import YTDLService jika belum ada
+      final url = isAudio
+          ? await YTDLService.getAudioStream(videoId)
+          : await YTDLService.getVideoStream(videoId);
+      
+      DownloadService.downloadFile(
+        url: url,
+        fileName: fileName,
+        // ignore: use_build_context_synchronously
+        context: context,
+      );
+    } catch (e) {
+      // ignore: use_build_context_synchronously
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gagal mempersiapkan unduhan: $e')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    // Tidak lagi menggunakan Scaffold, langsung kembalikan body-nya
     if (recentVideos.isEmpty) {
       return Center(
         child: Column(
@@ -69,7 +94,7 @@ class _ChartPageState extends State<ChartPage> {
             const SizedBox(height: 10),
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: Colors.pink),
-              onPressed: () => Navigator.pop(context), // Kembali ke halaman sebelumnya
+              onPressed: () => Navigator.pop(context),
               child: const Text('Cari Lagu'),
             ),
           ],
@@ -87,7 +112,6 @@ class _ChartPageState extends State<ChartPage> {
             padding: const EdgeInsets.all(12),
             child: Row(
               children: [
-                // NOMOR URUT
                 SizedBox(
                   width: 40,
                   child: Text(
@@ -96,7 +120,6 @@ class _ChartPageState extends State<ChartPage> {
                     textAlign: TextAlign.center,
                   ),
                 ),
-                // THUMBNAIL
                 Hero(
                   tag: 'chart_${v['id']}',
                   child: ClipRRect(
@@ -116,7 +139,6 @@ class _ChartPageState extends State<ChartPage> {
                   ),
                 ),
                 const SizedBox(width: 12),
-                // INFO
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -134,7 +156,40 @@ class _ChartPageState extends State<ChartPage> {
                     ],
                   ),
                 ),
-                const Icon(Icons.play_circle_fill, color: Colors.pink, size: 36),
+                // --- PERUBAHAN DIMULAI DI SINI ---
+                PopupMenuButton<String>(
+                  icon: const Icon(Icons.more_vert, color: Colors.grey),
+                  onSelected: (String value) {
+                    if (value == 'download_audio') {
+                      _download(v['id'], v['title'], true);
+                    } else if (value == 'download_video') {
+                      _download(v['id'], v['title'], false);
+                    }
+                  },
+                  itemBuilder: (BuildContext context) => [
+                    const PopupMenuItem<String>(
+                      value: 'download_audio',
+                      child: Row(
+                        children: [
+                          Icon(Icons.music_note, color: Colors.pink),
+                          SizedBox(width: 8),
+                          Text('Unduh Musik'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem<String>(
+                      value: 'download_video',
+                      child: Row(
+                        children: [
+                          Icon(Icons.videocam, color: Colors.pink),
+                          SizedBox(width: 8),
+                          Text('Unduh Video'),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                // --- PERUBAHAN SELESAI DI SINI ---
               ],
             ),
           ),
