@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:lazy_load_scrollview/lazy_load_scrollview.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -103,7 +102,7 @@ class _YMusicPageState extends State<YMusicPage> {
   }
 
   void _play(String id, String title, String channel) {
-    Provider.of<PlayerProvider>(context, listen: false).playVideo(
+    Provider.of<PlayerProvider>(context, listen: false).playMusic(
       videoId: id,
       title: title,
       channel: channel,
@@ -189,62 +188,82 @@ class _YMusicPageState extends State<YMusicPage> {
               ),
             )
           else
-            // --- SLIVER UNTUK DAFTAR VIDEO ---
-            SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, i) {
-                  final v = videos[i];
-                  return InkWell(
-                    onTap: () => _play(v['id'], v['title'], v['channel']),
-                    splashColor: Colors.pink.withValues(alpha: 0.3),
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Row(
-                        children: [
-                          Hero(
-                            tag: v['id'],
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(10),
-                              child: Image.network(
-                                v['thumbnail'],
-                                width: 90,
-                                height: 60,
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => Container(
-                                  width: 90,
-                                  height: 60,
-                                  color: Colors.grey[800],
-                                  child: const Icon(Icons.music_video, color: Colors.white),
-                                ),
+            // --- PERUBAHAN: WRAP DENGAN CONSUMER ---
+            Consumer<PlayerProvider>(
+              builder: (context, playerProvider, child) {
+                return SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (context, i) {
+                      final v = videos[i];
+                      return InkWell(
+                        onTap: () {
+                          // Cek apakah service sudah siap sebelum memutar
+                          if (playerProvider.isAudioServiceReady) {
+                            _play(v['id'], v['title'], v['channel']);
+                          } else {
+                            // Beri tahu user bahwa pemutar musik sedang disiapkan
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Pemutar musik sedang disiapkan...')),
+                            );
+                          }
+                        },
+                        // Nonaktifkan visual dan interaksi jika service belum siap
+                        child: Opacity(
+                          opacity: playerProvider.isAudioServiceReady ? 1.0 : 0.5,
+                          child: IgnorePointer(
+                            ignoring: !playerProvider.isAudioServiceReady,
+                            child: Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Row(
+                                children: [
+                                  Hero(
+                                    tag: v['id'],
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(10),
+                                      child: Image.network(
+                                        v['thumbnail'],
+                                        width: 90,
+                                        height: 60,
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (_, __, ___) => Container(
+                                          width: 90,
+                                          height: 60,
+                                          color: Colors.grey[800],
+                                          child: const Icon(Icons.music_video, color: Colors.white),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          v['title'],
+                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.white),
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        Text(
+                                          '${v['channel']} • ${v['duration']}',
+                                          style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const Icon(Icons.more_vert, color: Colors.grey),
+                                ],
                               ),
                             ),
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  v['title'],
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                Text(
-                                  '${v['channel']} • ${v['duration']}',
-                                  style: TextStyle(color: Colors.grey[400], fontSize: 12),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const Icon(Icons.more_vert, color: Colors.grey),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-                childCount: videos.length,
-              ),
+                        ),
+                      );
+                    },
+                    childCount: videos.length,
+                  ),
+                );
+              },
             ),
 
           // --- SLIVER UNTUK INDIKATOR LOAD MORE ---

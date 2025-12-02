@@ -45,7 +45,7 @@ class _ChartPageState extends State<ChartPage> {
 
   void _play(String id, String title, String channel) {
     // Panggil Provider untuk memutar video secara global
-    Provider.of<PlayerProvider>(context, listen: false).playVideo(
+    Provider.of<PlayerProvider>(context, listen: false).playMusic(
       videoId: id,
       title: title,
       channel: channel,

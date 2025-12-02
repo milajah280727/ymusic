@@ -1,3 +1,5 @@
+// services/ytdl_service.dart
+
 import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 
 class YTDLService {
@@ -20,13 +22,40 @@ class YTDLService {
     }
   }
 
-  static Future<String> getStream(String videoId) async {
+  static Future<String> getVideoStream(String videoId) async {
     final manifest = await _yt.videos.streamsClient.getManifest(videoId);
     final streamInfo = manifest.muxed.withHighestBitrate();
     return streamInfo.url.toString();
   }
 
+  // --- PERBAIKAN FUNGSI INI ---
+  static Future<String> getAudioStream(String videoId) async {
+    final manifest = await _yt.videos.streamsClient.getManifest(videoId);
+    
+    // Ambil semua stream muxed
+    final allMuxedStreams = manifest.muxed.toList();
+    
+    // Urutkan dari bitrate terendah ke tertinggi
+    allMuxedStreams.sort((a, b) => a.bitrate.compareTo(b.bitrate));
+    
+    // Ambil yang pertama (bitrate terendah)
+    final lowestBitrateStream = allMuxedStreams.first;
+    
+    return lowestBitrateStream.url.toString();
+  }
+
   static Future<Video> getInfo(String videoId) async {
     return await _yt.videos.get(videoId);
+  }
+
+  static Future<Map<String, dynamic>> getInfoAsMap(String videoId) async {
+    final video = await _yt.videos.get(videoId);
+    return {
+      'id': video.id.value,
+      'title': video.title,
+      'channel': video.author,
+      'duration': video.duration,
+      'thumbnailUrl': video.thumbnails.highResUrl,
+    };
   }
 }

@@ -1,10 +1,15 @@
+// lib/main.dart
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:line_icons/line_icons.dart'; // Import LineIcons
+import 'package:line_icons/line_icons.dart';
 
+// Import Provider dan Widget
 import 'providers/player_provider.dart';
 import 'widgets/mini_player_widget.dart';
-import 'widgets/top_navigation_chips.dart'; // Import widget yang sudah diubah
+import 'widgets/top_navigation_chips.dart';
+
+// Import Halaman
 import 'screens/home_page.dart';
 import 'screens/favorite_page.dart';
 import 'screens/chart_page.dart';
@@ -24,7 +29,7 @@ class MyApp extends StatelessWidget {
       create: (context) => PlayerProvider(),
       child: MaterialApp(
         debugShowCheckedModeBanner: false,
-        title: 'Music App',
+        title: 'YMusic',
         theme: ThemeData.dark().copyWith(
           scaffoldBackgroundColor: const Color.fromARGB(255, 28, 26, 26),
         ),
@@ -35,21 +40,6 @@ class MyApp extends StatelessWidget {
           '/search_result': (context) => SearchResultPage(
             query: ModalRoute.of(context)!.settings.arguments as String,
           ),
-        },
-        builder: (context, child) {
-          final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
-
-          return Stack(
-            children: [
-              child!,
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: keyboardHeight > 0 ? keyboardHeight : 0.0,
-                child: const MiniPlayerWidget(),
-              ),
-            ],
-          );
         },
       ),
     );
@@ -66,7 +56,6 @@ class MainNavigator extends StatefulWidget {
 class _MainNavigatorState extends State<MainNavigator> {
   int _selectedIndex = 0;
 
-  // --- PERUBAHAN: Tambahkan data ikon ---
   static const List<String> _titles = [
     'Beranda',
     'Favorit',
@@ -79,42 +68,61 @@ class _MainNavigatorState extends State<MainNavigator> {
     LineIcons.barChart,
   ];
 
-  static const List<Widget> _pages = [
-    YMusicPage(),
-    FavoritePage(),
-    ChartPage(),
+  static final List<Widget> _pages = [
+    const YMusicPage(),
+    const FavoritePage(),
+    const ChartPage(),
   ];
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color.fromARGB(255, 28, 26, 26),
-      appBar: AppBar(
-        backgroundColor: const Color.fromARGB(255, 43, 41, 41),
-        title: const Text('YMusic', style: TextStyle(fontWeight: FontWeight.bold)),
-        elevation: 0,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.search),
-            onPressed: () => Navigator.pushNamed(context, '/search'),
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          // --- GUNAKAN WIDGET NAVIGASI IKON YANG BARU ---
-          TopNavigationChips(
-            titles: _titles,
-            icons: _icons, // Kirim data ikon
-            selectedIndex: _selectedIndex,
-            onSelected: (index) => setState(() => _selectedIndex = index),
-          ),
-          // Konten halaman yang dipilih
-          Expanded(
-            child: _pages[_selectedIndex],
-          ),
-        ],
-      ),
+    return Consumer<PlayerProvider>(
+      builder: (context, playerProvider, child) {
+        // Gunakan ValueListenableBuilder untuk mendengarkan perubahan persentase player
+        return ValueListenableBuilder(
+          valueListenable: playerProvider.playerPercentageNotifier,
+          builder: (context, _, __) {
+            // Ambil nilai persentase dari notifier
+            final percentage = playerProvider.playerPercentageNotifier.value;
+            
+            // --- PERUBAHAN: SEMBUNYIKAN APPBAR SAAT PLAYER HAMPIR MAKSIMALKAN ---
+            // Player dianggap maksimal jika persentasenya mendekati 1.0 (misalnya > 0.95)
+            // Ini akan menyembunyikan AppBar hanya saat player hampir penuh
+            final shouldHideAppBar = playerProvider.isPlayerVisible && percentage > 0.10;
+
+            return Scaffold(
+              backgroundColor: const Color.fromARGB(255, 28, 26, 26),
+              
+              body: Stack(
+                children: [
+                  // Konten utama (Tab Navigasi dan Halaman)
+                  Column(
+                    children: [
+                      TopNavigationChips(
+                        titles: _titles,
+                        icons: _icons,
+                        selectedIndex: _selectedIndex,
+                        onSelected: (index) => setState(() => _selectedIndex = index),
+                      ),
+                      // Konten halaman yang dipilih
+                      Expanded(
+                        child: _pages[_selectedIndex],
+                      ),
+                    ],
+                  ),
+                  // MiniPlayerWidget yang melayang di atas konten utama
+                  const Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    child: MiniPlayerWidget(),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 }

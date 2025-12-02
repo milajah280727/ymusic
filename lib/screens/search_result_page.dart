@@ -101,7 +101,7 @@ class _SearchResultPageState extends State<SearchResultPage> {
             final v = results[i];
             return InkWell(
               onTap: () {
-                Provider.of<PlayerProvider>(context, listen: false).playVideo(
+                Provider.of<PlayerProvider>(context, listen: false).playMusic(
                   videoId: v['id'],
                   title: v['title'],
                   channel: v['channel'],
